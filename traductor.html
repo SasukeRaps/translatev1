@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traductor Gemini Conversacional (PWA) V5</title>
+    <!-- Carga de Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <!-- CONFIGURACIÓN PWA CLAVE PARA "AÑADIR A PANTALLA DE INICIO" -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Gemini Translator">
+    
+    <!-- Simulamos un manifest.json mínimo -->
+    <link rel="manifest" href="data:application/manifest+json;charset=utf-8,{%22name%22:%22Traductor%20Conversacional%22,%22short_name%22:%22Traductor%22,%22start_url%22:%22.%2F%22,%22display%22:%22standalone%22,%22background_color%22:%22%23111827%22,%22theme_color%22:%22%2314b8a6%22,%22icons%22:[{%22src%22:%22icon.png%22,%22sizes%22:%22192x192%22,%22type%22:%22image%2Fpng%22}]}">
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .min-h-screen { min-height: 100dvh; }
+        /* Estilo para ocultar flechas de select y usar el SVG de fondo */
+        select {
+            -moz-appearance: none;
+            -webkit-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='white'%3E%3Cpath fill-rule='evenodd' d='M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z' clip-rule='evenodd' /%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.5rem center;
+            background-size: 1.5em 1.5em;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white p-4 flex flex-col min-h-screen">
+
+    <header class="text-center mb-6">
+        <h1 class="text-3xl font-bold text-teal-400">Conversor IA en Tiempo Real</h1>
+        <p class="text-sm text-gray-400 mt-1">Soporte actualizado para Español LATAM</p>
+    </header>
+
+    <!-- Selectores de Idiomas -->
+    <div id="language-selectors" class="flex items-center justify-between bg-gray-800 p-3 rounded-xl shadow-lg mb-6">
+        <div class="flex flex-col flex-grow">
+            <label for="source-lang" class="text-xs font-medium text-gray-400">Tu idioma (Hablas)</label>
+            <select id="source-lang" class="bg-transparent text-lg font-semibold border-none focus:ring-0 focus:outline-none pr-8 cursor-pointer"></select>
+        </div>
+        
+        <button id="swap-btn" class="p-2 bg-teal-600 hover:bg-teal-700 rounded-full transition duration-150 ease-in-out shadow-md disabled:opacity-50 mx-2" aria-label="Intercambiar idiomas">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><path d="M19 14v6"/><path d="M21 16h-4"/><path d="M17 22l4-4-4-4"/><path d="M5 10v6"/><path d="M3 12h4"/><path d="M7 8l-4 4 4 4"/><path d="M5 2h6"/><path d="M13 2h6"/></svg>
+        </button>
+
+        <div class="flex flex-col flex-grow text-right">
+            <label for="target-lang" class="text-xs font-medium text-gray-400">Idioma del interlocutor (Traduces a)</label>
+            <select id="target-lang" class="bg-transparent text-lg font-semibold border-none focus:ring-0 focus:outline-none pl-8 cursor-pointer"></select>
+        </div>
+    </div>
+
+    <!-- Caja de Entrada (Tu Voz/Texto) -->
+    <div class="bg-gray-800 p-4 rounded-xl shadow-lg mb-6 flex-grow flex flex-col">
+        <div class="flex items-center justify-between mb-2">
+            <span id="source-name" class="text-sm text-gray-400 font-medium"></span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-500"><path d="m3 7 4 4 4-4"/><path d="M3 17h18"/></svg>
+        </div>
+        <textarea
+            id="input-text"
+            class="flex-grow bg-gray-700 p-3 rounded-lg text-lg resize-none focus:ring-teal-500 focus:border-teal-500 border-none outline-none placeholder-gray-500"
+            placeholder="Toca el micrófono para hablar o escribe aquí..."
+            rows="4"
+        ></textarea>
+        <button
+            id="translate-btn"
+            class="mt-3 py-2 px-4 bg-teal-600 hover:bg-teal-700 rounded-lg text-white font-semibold transition duration-150 ease-in-out shadow-md disabled:opacity-50 flex items-center justify-center"
+            disabled
+        >
+            <span id="translate-btn-text">Traducir Texto</span>
+        </button>
+    </div>
+
+    <!-- Caja de Salida (Traducción y Audio) -->
+    <div class="bg-gray-700 p-4 rounded-xl shadow-lg mb-6 flex-grow flex flex-col">
+        <div class="flex items-center justify-between mb-2">
+            <span id="target-name" class="text-sm text-gray-400 font-medium"></span>
+            <button id="play-btn" class="text-teal-400 hover:text-teal-300 disabled:opacity-50 p-1 rounded-full transition duration-150" disabled aria-label="Reproducir audio de la traducción">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-teal-400"><polygon points="11 5 18 12 11 19 11 5"></polygon><path d="M22 12A10 10 0 0 1 12 2v20A10 10 0 0 1 22 12z"/></svg>
+            </button>
+        </div>
+        <div id="translated-text" class="flex-grow bg-gray-600 p-3 rounded-lg text-xl text-teal-200 resize-none overflow-y-auto">
+            <span class="text-gray-400 italic">La traducción aparecerá aquí.</span>
+        </div>
+    </div>
+
+    <!-- Botón de Micrófono Principal (Acción Central) -->
+    <div class="flex justify-center mb-6">
+        <button id="mic-btn" class="p-6 rounded-full shadow-2xl transition duration-300 ease-in-out transform hover:scale-105 active:scale-95 bg-teal-600 hover:bg-teal-700 ring-4 ring-teal-400/50" aria-label="Activar/Desactivar Micrófono">
+            <svg id="mic-icon" xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+        </button>
+    </div>
+    
+    <!-- Barra de Estado -->
+    <div class="text-center text-sm p-3 bg-gray-800 rounded-lg shadow-inner">
+        <p id="status" class="font-semibold text-gray-300">Listo para comenzar.</p>
+    </div>
+    <div class="text-center text-xs text-gray-500 mt-2">
+        <p>Consejo: La traducción se activa automáticamente al hablar.</p>
+    </div>
+
+    <script>
+        // La clave API se inyecta automáticamente en este entorno   cuenta tecnosasukeandroid
+        const apiKey = "AIzaSyAEysElNfZYkMYt5lm1XHWu0L1MydSgUd8"; 
+
+        // --- CONSTANTES Y ESTADO ---
+        const LANGUAGES = [
+            { code: 'es-MX', name: 'Español (México/LATAM)' },
+            { code: 'en-US', name: 'Inglés (EE. UU.)' },
+            { code: 'ja-JP', name: 'Japonés' },
+            { code: 'ko-KR', name: 'Coreano (Corea del Sur)' },
+            { code: 'ru-RU', name: 'Ruso (Rusia)' },
+            { code: 'zh-CN', name: 'Chino Mandarín' },
+        ];
+        
+        // Mapeo de códigos de idioma a la mejor voz TTS de Gemini disponible.
+        const getVoiceName = (langCode) => {
+            if (langCode.startsWith('ja')) return 'Aoede'; 
+            if (langCode.startsWith('ko')) return 'Leda'; 
+            if (langCode.startsWith('ru')) return 'Charon'; 
+            if (langCode.startsWith('es')) return 'Kore'; 
+            return 'Puck'; 
+        };
+
+        const getLangName = (code) => LANGUAGES.find(l => l.code === code)?.name || code;
+
+        let isTranslating = false;
+        let isListening = false;
+        let recognition = null;
+        let audioContext = null;
+
+        // --- REFERENCIAS DOM ---
+        const sourceLangSelect = document.getElementById('source-lang');
+        const targetLangSelect = document.getElementById('target-lang');
+        const sourceNameSpan = document.getElementById('source-name');
+        const targetNameSpan = document.getElementById('target-name');
+        const swapBtn = document.getElementById('swap-btn');
+        const inputTextarea = document.getElementById('input-text');
+        const translateBtn = document.getElementById('translate-btn');
+        const translateBtnText = document.getElementById('translate-btn-text');
+        const translatedDiv = document.getElementById('translated-text');
+        const playBtn = document.getElementById('play-btn');
+        const micBtn = document.getElementById('mic-btn');
+        const micIcon = document.getElementById('mic-icon');
+        const statusP = document.getElementById('status');
+        
+        // --- UTILIDADES DE AUDIO (TTS) ---
+
+        const base64ToArrayBuffer = (base64) => {
+            try {
+                const binaryString = atob(base64);
+                const len = binaryString.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                return bytes.buffer;
+            } catch (e) {
+                console.error("Error decoding Base64:", e);
+                return new ArrayBuffer(0);
+            }
+        };
+
+        const pcmToWav = (pcm16, sampleRate = 24000) => {
+            const pcmData = pcm16.buffer;
+            const numChannels = 1;
+            const bytesPerSample = 2; // 16-bit PCM
+
+            const wavData = new ArrayBuffer(44 + pcmData.byteLength);
+            const view = new DataView(wavData);
+
+            let offset = 0;
+            
+            // RIFF chunk descriptor
+            view.setUint32(offset, 0x52494646, false); offset += 4; // "RIFF"
+            view.setUint32(offset, 36 + pcmData.byteLength, true); offset += 4; // file size
+            view.setUint32(offset, 0x57415645, false); offset += 4; // "WAVE"
+            
+            // fmt sub-chunk
+            view.setUint32(offset, 0x666d7420, false); offset += 4; // "fmt "
+            view.setUint32(offset, 16, true); offset += 4; // sub-chunk size
+            view.setUint16(offset, 1, true); offset += 2; // audio format (1 = PCM)
+            view.setUint16(offset, numChannels, true); offset += 2; // number of channels
+            view.setUint32(offset, sampleRate, true); offset += 4; // sample rate
+            view.setUint32(offset, sampleRate * numChannels * bytesPerSample, true); offset += 4; // byte rate
+            view.setUint16(offset, numChannels * bytesPerSample, true); offset += 2; // block align
+            view.setUint16(offset, 8 * bytesPerSample, true); offset += 2; // bits per sample (16)
+            
+            // data sub-chunk
+            view.setUint32(offset, 0x64617461, false); offset += 4; // "data"
+            view.setUint32(offset, pcmData.byteLength, true); offset += 4; // data size
+            
+            const pcmArray = new Int16Array(pcmData);
+            for (let i = 0; i < pcmArray.length; i++) {
+                view.setInt16(offset, pcmArray[i], true);
+                offset += 2;
+            }
+
+            return new Blob([wavData], { type: 'audio/wav' });
+        };
+
+        // --- FUNCIONES DE ESTADO Y UI ---
+        
+        const updateStatus = (message, colorClass = 'text-gray-300') => {
+            statusP.textContent = message;
+            statusP.className = `font-semibold ${colorClass}`;
+        };
+
+        const setTranslatingState = (isPending) => {
+            isTranslating = isPending;
+            translateBtn.disabled = isPending || !inputTextarea.value.trim();
+            micBtn.disabled = isPending;
+            swapBtn.disabled = isPending;
+            sourceLangSelect.disabled = isPending;
+            targetLangSelect.disabled = isPending;
+
+            if (isPending) {
+                translateBtnText.innerHTML = 
+                    `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="animate-spin mr-2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.76L3 7"/></svg> Traduciendo...`;
+                micBtn.classList.remove('bg-red-600', 'hover:bg-red-700', 'ring-red-400/50');
+                micBtn.classList.add('bg-gray-600', 'hover:bg-gray-700', 'ring-gray-400/50');
+            } else {
+                translateBtnText.innerHTML = `Traducir Texto`;
+                micBtn.classList.remove('bg-gray-600', 'hover:bg-gray-700', 'ring-gray-400/50');
+                micBtn.classList.add('bg-teal-600', 'hover:bg-teal-700', 'ring-teal-400/50');
+            }
+        };
+
+        const setListeningState = (isPending) => {
+            isListening = isPending;
+            micBtn.disabled = isTranslating;
+            translateBtn.disabled = isPending || isTranslating || !inputTextarea.value.trim();
+            swapBtn.disabled = isPending || isTranslating;
+            sourceLangSelect.disabled = isPending || isTranslating;
+            targetLangSelect.disabled = isPending || isTranslating;
+
+            if (isPending) {
+                micBtn.classList.remove('bg-teal-600', 'hover:bg-teal-700', 'ring-teal-400/50');
+                micBtn.classList.add('bg-red-600', 'hover:bg-red-700', 'ring-red-400/50', 'animate-pulse');
+                updateStatus('Escuchando... Di algo.', 'text-red-400');
+            } else {
+                micBtn.classList.remove('bg-red-600', 'hover:bg-red-700', 'ring-red-400/50', 'animate-pulse');
+                micBtn.classList.add('bg-teal-600', 'hover:bg-teal-700', 'ring-teal-400/50');
+                if (!isTranslating) {
+                    updateStatus('Escucha finalizada. Presiona el micrófono para hablar.');
+                }
+            }
+        };
+
+        const updateLanguageNames = () => {
+            sourceNameSpan.textContent = getLangName(sourceLangSelect.value);
+            targetNameSpan.textContent = getLangName(targetLangSelect.value);
+        };
+
+        // --- LÓGICA DE API ---
+
+        const handleTTS = async (text, voiceName) => {
+            if (!text) return;
+            playBtn.disabled = true;
+            updateStatus('Generando audio...');
+
+            try {
+                // Implementar lógica de reintento (exponential backoff) para la API de TTS
+                const maxRetries = 3;
+                let attempt = 0;
+                let response = null;
+
+                while (attempt < maxRetries) {
+                    const ttsPayload = {
+                        contents: [{
+                            parts: [{ text: text }]
+                        }],
+                        generationConfig: {
+                            responseModalities: ["AUDIO"],
+                            speechConfig: {
+                                voiceConfig: {
+                                    prebuiltVoiceConfig: { voiceName: voiceName }
+                                }
+                            }
+                        },
+                        model: "gemini-2.5-flash-preview-tts"
+                    };
+
+                    const ttsApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`;
+                    
+                    response = await fetch(ttsApiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(ttsPayload)
+                    });
+
+                    if (response.ok) {
+                        break; // Salir del bucle si es exitoso
+                    }
+
+                    if (response.status === 429 || response.status >= 500) {
+                        attempt++;
+                        if (attempt < maxRetries) {
+                            const delay = Math.pow(2, attempt) * 1000;
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                        }
+                    } else {
+                        throw new Error(`TTS HTTP error! status: ${response.status}`);
+                    }
+                }
+
+                if (!response || !response.ok) {
+                    throw new Error(`TTS API failed after ${maxRetries} attempts.`);
+                }
+
+                const result = await response.json();
+                const part = result?.candidates?.[0]?.content?.parts?.[0];
+                const audioData = part?.inlineData?.data;
+                const mimeType = part?.inlineData?.mimeType;
+
+                if (audioData && mimeType && mimeType.startsWith("audio/")) {
+                    const match = mimeType.match(/rate=(\d+)/);
+                    const sampleRate = match ? parseInt(match[1], 10) : 24000;
+                    
+                    const pcmData = base64ToArrayBuffer(audioData);
+                    const pcm16 = new Int16Array(pcmData);
+                    
+                    const wavBlob = pcmToWav(pcm16, sampleRate);
+                    const audioUrl = URL.createObjectURL(wavBlob);
+                    
+                    const audio = new Audio(audioUrl);
+                    audio.play();
+                    audio.onended = () => {
+                        updateStatus('Listo. Presiona el micrófono o escribe.');
+                        playBtn.disabled = false;
+                        URL.revokeObjectURL(audioUrl); 
+                    };
+                    audio.onerror = () => {
+                        updateStatus('Error al reproducir audio.', 'text-red-400');
+                        playBtn.disabled = false;
+                        URL.revokeObjectURL(audioUrl); 
+                    };
+                    updateStatus('Reproduciendo traducción...', 'text-yellow-400');
+                } else {
+                    updateStatus('Error: No se pudo generar audio TTS.', 'text-red-400');
+                    playBtn.disabled = false;
+                }
+
+            } catch (error) {
+                console.error('Error durante la síntesis de voz (TTS):', error);
+                updateStatus('Error al conectar con la API de voz.', 'text-red-400');
+                playBtn.disabled = false;
+            }
+        };
+
+        const handleTextTranslation = async (textToTranslate) => {
+            if (!textToTranslate.trim()) return;
+
+            setTranslatingState(true);
+            translatedDiv.innerHTML = '<span class="text-gray-400 italic">Traduciendo...</span>';
+            const targetLang = targetLangSelect.value;
+            const sourceLang = sourceLangSelect.value;
+            const voiceName = getVoiceName(targetLang);
+
+            try {
+                // System instruction para traducción conversacional
+                const systemPrompt = `You are a highly skilled, informal, and natural language translator, specializing in conversational and colloquial language, similar to DeepL. Translate the text accurately and naturally into a casual tone suitable for real-time conversation. The source language is ${sourceLang} and the target language is ${targetLang}. Only output the translated text.`;
+                
+                // Múltiples queries para asegurar un mejor contexto para idiomas no latinos
+                const queries = [`Translate "${textToTranslate}" to ${getLangName(targetLang)} conversational`, `traducción conversacional de "${textToTranslate}" a ${getLangName(targetLang)}`];
+
+                const payload = {
+                    contents: [{ parts: [{ text: textToTranslate }] }],
+                    systemInstruction: {
+                        parts: [{ text: systemPrompt }]
+                    },
+                    tools: [{ "google_search": { queries } }],
+                };
+
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+                // Implementar lógica de reintento (exponential backoff) para la API de Traducción
+                const maxRetries = 3;
+                let attempt = 0;
+                let response = null;
+
+                while (attempt < maxRetries) {
+                    response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (response.ok) {
+                        break; // Salir del bucle si es exitoso
+                    }
+
+                    if (response.status === 429 || response.status >= 500) {
+                        attempt++;
+                        if (attempt < maxRetries) {
+                            const delay = Math.pow(2, attempt) * 1000;
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                        }
+                    } else {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                }
+
+                if (!response || !response.ok) {
+                    throw new Error(`Translation API failed after ${maxRetries} attempts.`);
+                }
+
+                const result = await response.json();
+                const translated = result.candidates?.[0]?.content?.parts?.[0]?.text || 'Error en la traducción.';
+                
+                translatedDiv.textContent = translated;
+                playBtn.disabled = false;
+                
+                // Generar y reproducir audio automáticamente
+                await handleTTS(translated, voiceName);
+
+            } catch (error) {
+                console.error('Error durante la traducción:', error);
+                updateStatus('Error al conectar con la API de traducción.', 'text-red-400');
+                translatedDiv.innerHTML = '<span class="text-red-400 italic">No se pudo traducir.</span>';
+                playBtn.disabled = true;
+            } finally {
+                setTranslatingState(false);
+            }
+        };
+
+        // --- MANEJADORES DE EVENTOS DE VOZ Y UI ---
+
+        const initializeSpeechRecognition = () => {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                updateStatus('El reconocimiento de voz no está soportado en este navegador.', 'text-red-400');
+                micBtn.disabled = true;
+                return;
+            }
+
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+
+            recognition.onstart = () => {
+                setListeningState(true);
+            };
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                inputTextarea.value = transcript;
+                handleTextTranslation(transcript);
+            };
+
+            recognition.onerror = (event) => {
+                setListeningState(false);
+                updateStatus(`Error de voz: ${event.error}. Intenta de nuevo.`, 'text-red-400');
+                console.error('Speech Recognition Error:', event.error);
+            };
+
+            recognition.onend = () => {
+                setListeningState(false);
+            };
+        };
+
+        const toggleListening = () => {
+            if (!recognition) return;
+
+            if (isListening) {
+                recognition.stop();
+            } else {
+                if (isTranslating) return; 
+                
+                recognition.lang = sourceLangSelect.value;
+                inputTextarea.value = '';
+                translatedDiv.innerHTML = '<span class="text-gray-400 italic">Escuchando...</span>';
+                playBtn.disabled = true;
+                
+                try {
+                    recognition.start();
+                } catch (e) {
+                    console.warn("Recognition already started or busy:", e);
+                    setListeningState(false);
+                }
+            }
+        };
+
+        const swapLanguages = () => {
+            const tempSource = sourceLangSelect.value;
+            const tempTarget = targetLangSelect.value;
+
+            sourceLangSelect.value = tempTarget;
+            targetLangSelect.value = tempSource;
+
+            const tempInput = inputTextarea.value;
+            inputTextarea.value = translatedDiv.textContent.trim() === 'La traducción aparecerá aquí.' ? '' : translatedDiv.textContent;
+            translatedDiv.textContent = tempInput;
+            
+            updateLanguageNames();
+            updateStatus('Idiomas intercambiados.', 'text-teal-400');
+        };
+
+        const setupUI = () => {
+            // Rellenar selectores de idiomas
+            LANGUAGES.forEach(lang => {
+                const optionSource = document.createElement('option');
+                optionSource.value = lang.code;
+                optionSource.textContent = lang.name;
+                sourceLangSelect.appendChild(optionSource);
+
+                const optionTarget = document.createElement('option');
+                optionTarget.value = lang.code;
+                optionTarget.textContent = lang.name;
+                targetLangSelect.appendChild(optionTarget);
+            });
+            
+            // Valores iniciales (Español LATAM a Japonés por defecto)
+            sourceLangSelect.value = 'es-MX'; 
+            targetLangSelect.value = 'ja-JP';
+
+            updateLanguageNames();
+            initializeSpeechRecognition();
+
+            // Listeners
+            sourceLangSelect.addEventListener('change', updateLanguageNames);
+            targetLangSelect.addEventListener('change', updateLanguageNames);
+			swapBtn.addEventListener('click', swapLanguages);
+			micBtn.addEventListener('click', toggleListening);
+			translateBtn.addEventListener('click', () => handleTextTranslation(inputTextarea.value));
+			playBtn.addEventListener('click', () => handleTTS(translatedDiv.textContent, getVoiceName(targetLangSelect.value)));
+            
+            inputTextarea.addEventListener('input', () => {
+                translateBtn.disabled = isListening || isTranslating || !inputTextarea.value.trim();
+            });
+            
+            // Inicializar el estado del botón de traducción
+			translateBtn.disabled = !inputTextarea.value.trim();
+		};
+
+        // Iniciar la aplicación cuando la ventana esté completamente cargada
+        window.onload = setupUI;
+
+    </script>
+</body>
+</html>
+
